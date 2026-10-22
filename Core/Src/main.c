@@ -32,7 +32,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+#define clamp(value, min, max) (((value) < (min)) ? (min) : (((value) > (max)) ? (max) : (value)))
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -44,7 +44,6 @@
 TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim3;
 TIM_HandleTypeDef htim6;
-
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
@@ -62,6 +61,7 @@ static void MX_TIM2_Init(void);
 static void MX_TIM6_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_TIM3_Init(void);
+
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -125,8 +125,10 @@ int main(void)
 		new_sample = 0; // clear first so a new sample isn't missed
 		uint32_t pulses = pulses_per_sec; // snapshot the ISR value
 
-		// Change the duty cycle of TIM3 (pin D12) based on the pulses from the encoder
-		duty_cycle = 50 + (pulses_norm - pulses);
+		// Change the duty cycle of TIM3 (pin D12) based on the pulses from the encoder, keeping it within 20-80%
+		int32_t error = (int32_t)pulses_norm - (int32_t)pulses;
+		duty_cycle = clamp(50 + error, 20, 80);
+		__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, duty_cycle);
 
 		// Output the pulses/sec to CoolTerm
 		char textbuffer[64];
@@ -269,7 +271,7 @@ static void MX_TIM3_Init(void)
     Error_Handler();
   }
   sConfigOC.OCMode = TIM_OCMODE_PWM1;
-  sConfigOC.Pulse = duty_cycle; // Duty Cycle of TIM3 (Pin D12) that drives the MOSFET
+  sConfigOC.Pulse = 50;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
   if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)

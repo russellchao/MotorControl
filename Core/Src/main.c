@@ -51,6 +51,8 @@ UART_HandleTypeDef huart2;
 volatile uint32_t pulses_per_sec = 0;
 volatile uint8_t  new_sample = 0;
 static uint32_t last_count = 0;
+static uint32_t pulses_norm = 100; // will change
+volatile uint32_t duty_cycle = 50;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -123,9 +125,12 @@ int main(void)
 		new_sample = 0; // clear first so a new sample isn't missed
 		uint32_t pulses = pulses_per_sec; // snapshot the ISR value
 
+		// Change the duty cycle of TIM3 (pin D12) based on the pulses from the encoder
+		duty_cycle = 50 + (pulses_norm - pulses);
+
 		// Output the pulses/sec to CoolTerm
-		char textbuffer[32];
-		int len = snprintf(textbuffer, sizeof(textbuffer), "Pulses/Sec: %lu\r\n", pulses);
+		char textbuffer[64];
+		int len = snprintf(textbuffer, sizeof(textbuffer), "Pulses/Sec: %lu | Duty Cycle: %lu%%\r\n", pulses, duty_cycle);
 		HAL_UART_Transmit(&huart2, (uint8_t *)textbuffer, len, 100);
 	  }
   }
@@ -264,7 +269,7 @@ static void MX_TIM3_Init(void)
     Error_Handler();
   }
   sConfigOC.OCMode = TIM_OCMODE_PWM1;
-  sConfigOC.Pulse = 50; // Duty Cycle of TIM3 (Pin D12)
+  sConfigOC.Pulse = duty_cycle; // Duty Cycle of TIM3 (Pin D12) that drives the MOSFET
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
   if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)

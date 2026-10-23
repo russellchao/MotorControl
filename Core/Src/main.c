@@ -50,7 +50,7 @@ UART_HandleTypeDef huart2;
 volatile uint32_t pulses_per_sec = 0;
 volatile uint8_t  new_sample = 0;
 static uint32_t last_count = 0;
-static uint32_t pulses_norm = 100; // will change
+static uint32_t pulses_norm = 8000; // will change
 volatile uint32_t duty_cycle = 50;
 /* USER CODE END PV */
 
@@ -127,7 +127,7 @@ int main(void)
 
 		// Change the duty cycle of TIM3 (pin D12) based on the pulses from the encoder, keeping it within 20-80%
 		int32_t error = (int32_t)pulses_norm - (int32_t)pulses;
-		duty_cycle = clamp(50 + error, 20, 80);
+		duty_cycle = clamp(50 + (error/256), 20, 80);
 		__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, duty_cycle);
 
 		// Output the pulses/sec to CoolTerm
@@ -381,9 +381,8 @@ static void MX_GPIO_Init(void)
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
   if (htim->Instance == TIM6) {
-    uint32_t now = __HAL_TIM_GET_COUNTER(&htim2);
-    pulses_per_sec = now - last_count;   // wraparound-safe
-    last_count = now;
+    pulses_per_sec = __HAL_TIM_GET_COUNTER(&htim2);
+    TIM2->CNT = 0;
     new_sample = 1;
   }
 }

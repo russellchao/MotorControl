@@ -32,7 +32,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define clamp(value, min, max) (((value) < (min)) ? (min) : (((value) > (max)) ? (max) : (value)))
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -48,10 +48,13 @@ TIM_HandleTypeDef htim6;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
-volatile uint32_t pulses_per_sec = 0;
-volatile uint8_t  new_sample = 0;
-static uint32_t pulses_norm = 800; // will change
-volatile uint32_t duty_cycle = 50;
+volatile uint8_t new_sample = 0;
+volatile uint32_t pulses_this_sample = 0;
+static uint32_t target_pulses_per_sample = 800;
+
+volatile uint32_t duty_cycle = 0;
+volatile int32_t proportion = 0;
+volatile int32_t integral = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -120,17 +123,35 @@ int main(void)
     /* USER CODE BEGIN 3 */
 	  if (new_sample)
 	  {
-		new_sample = 0; // clear first so a new sample isn't missed
-		uint32_t pulses = pulses_per_sec; // snapshot the ISR value
+		// Reset the flag first so a new sample isn't missed
+		new_sample = 0;
 
-		// Change the duty cycle of TIM3 (pin D12) based on the pulses from the encoder, keeping it within 20-80%
-		int32_t error = (int32_t)pulses_norm - (int32_t)pulses;
-		duty_cycle = clamp(50 + (error/32), 20, 80);
+		// Error between the target pulses/sample and actual pulses read this sample
+		int32_t error = (int32_t)target_pulses_per_sample - (int32_t)pulses_this_sample;
+
+		// Duty Cycle calculation using the PID method (no D as of now)
+		if (error > 0) {
+			if (integral < (htim3.Init.Period - 5)) integral++; // Too slow - increase the integral factor
+		}
+		if (error < 0) {
+			if (integral > 0) integral--; // Too fast - decrease the integral factor
+		}
+		proportion = error / 8;
+		duty_cycle = proportion + integral;
+
+		// Cap the duty cycle at 5 less than the current period of TIM3
+		if (duty_cycle > (htim3.Init.Period - 5)) {
+			duty_cycle = htim3.Init.Period - 5;
+		}
+
+		// Set the new duty cycle to TIM3
 		__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, duty_cycle);
 
-		// Output the pulses/sec to CoolTerm
+		// Output the Pulses this Sample and Duty Cycle to CoolTerm
 		char textbuffer[64];
-		int len = snprintf(textbuffer, sizeof(textbuffer), "Pulses/Sec: %lu | Duty Cycle: %lu%%\r\n", pulses, duty_cycle);
+		int len = snprintf(
+			textbuffer, sizeof(textbuffer), "Pulses This Sample: %lu | Duty Cycle: %lu%%\r\n", pulses_this_sample, duty_cycle
+		);
 		HAL_UART_Transmit(&huart2, (uint8_t *)textbuffer, len, 100);
 	  }
   }
@@ -391,7 +412,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
   if (htim->Instance == TIM6) {
 	HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_4);
-    pulses_per_sec = __HAL_TIM_GET_COUNTER(&htim2);
+    pulses_this_sample = __HAL_TIM_GET_COUNTER(&htim2);
     TIM2->CNT = 0;
     new_sample = 1;
   }

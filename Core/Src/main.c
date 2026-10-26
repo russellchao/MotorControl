@@ -379,6 +379,7 @@ static void MX_GPIO_Init(void)
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
   if (htim->Instance == TIM6) {
+	  //
 	HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_4);
 
 	// Take the number of pulses (ticks from TIM2) from this sample and reset TIM2

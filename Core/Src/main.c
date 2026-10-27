@@ -122,6 +122,13 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
 
+	// Output the Pulses this Sample and Duty Cycle to CoolTerm
+	char textbuffer[64];
+	int len = snprintf(
+		textbuffer, sizeof(textbuffer), "Pulses This Sample: %lu | Duty Cycle: %lu%%\r\n", pulses_this_sample, duty_cycle
+	);
+	HAL_UART_Transmit(&huart2, (uint8_t *)textbuffer, len, 100);
+
   }
   /* USER CODE END 3 */
 }
@@ -379,7 +386,8 @@ static void MX_GPIO_Init(void)
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
   if (htim->Instance == TIM6) {
-	HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_4);
+	// Set pin PA4 HIGH at the start of the ISR
+	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
 
 	// Take the number of pulses (ticks from TIM2) from this sample and reset TIM2
 	pulses_this_sample = __HAL_TIM_GET_COUNTER(&htim2);
@@ -406,12 +414,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 	// Set the new duty cycle to TIM3
 	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, duty_cycle);
 
-	// Output the Pulses this Sample and Duty Cycle to CoolTerm
-	char textbuffer[64];
-	int len = snprintf(
-		textbuffer, sizeof(textbuffer), "Pulses This Sample: %lu | Duty Cycle: %lu%%\r\n", pulses_this_sample, duty_cycle
-	);
-	HAL_UART_Transmit(&huart2, (uint8_t *)textbuffer, len, 100);
+	// Set pin PA4 LOW at the end of the ISR
+	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
   }
 }
 /* USER CODE END 4 */

@@ -51,9 +51,9 @@ UART_HandleTypeDef huart2;
 /* USER CODE BEGIN PV */
 volatile uint8_t new_sample = 0;
 volatile uint32_t pulses_this_sample = 0;
-static uint32_t target_pulses_per_sample = 200;
+static uint32_t target_pulses_per_sample = 800;
 
-volatile uint32_t tim3_on_period = 0;
+volatile int32_t tim3_on_period = 0;
 volatile int32_t proportion = 0;
 volatile int32_t integral = 0;
 /* USER CODE END PV */
@@ -441,17 +441,20 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 
 	// On_period calculation using the PID method (no D as of now), keeping within a 0-95% Duty Cycle
 	if (error > 0) {
-		if (integral < ((uint32_t)htim3.Init.Period * 0.95)) integral += 2; // Motor too slow - increase the integral factor
+		if (integral < ((uint32_t)htim3.Init.Period * 0.95)) integral += 4; // Motor too slow - increase the integral factor
 	}
 	if (error < 0) {
-		if (integral > 0) integral -= 2; // Motor too fast - decrease the integral factor
+		if (integral > 0) integral -= 4; // Motor too fast - decrease the integral factor
 	}
 	proportion = error / 16;
 	tim3_on_period = proportion + integral;
 
-	// Safety net: Cap the TIM3 on_period to 95% of the TIM3 Counter Period (max 95% duty cycle)
+	// Cap the TIM3 on_period between 5-95% of the TIM3 Counter Period (min 5%, max 95% duty cycle)
 	if (tim3_on_period > ((uint32_t)htim3.Init.Period * 0.95)) {
 		tim3_on_period = ((uint32_t)htim3.Init.Period * 0.95);
+	}
+	if (tim3_on_period < ((uint32_t)htim3.Init.Period * 0.05)) {
+		tim3_on_period = ((uint32_t)htim3.Init.Period * 0.05);
 	}
 
 	// Set the new on_period to TIM3

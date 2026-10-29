@@ -32,7 +32,11 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+// From the open-loop test: duty_counts ≈ FF_OFFSET + FF_SLOPE * target
+#define FF_OFFSET  100.0f
+#define FF_SLOPE   0.6f
+#define KP         0.15f
+#define KI         0.2f
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -52,10 +56,7 @@ UART_HandleTypeDef huart2;
 volatile uint8_t new_sample = 0;
 volatile uint32_t pulses_this_sample = 0;
 static uint32_t target_pulses_per_sample = 800;
-
 volatile int32_t tim3_on_period = 0;
-volatile int32_t proportion = 0;
-volatile int32_t integral = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -129,7 +130,12 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	  print_pulses_and_dc();
+	  if (new_sample)
+	  {
+		  new_sample = 0;
+		  print_pulses_and_dc();
+	  }
+
 	  //sprint_target_pulses();
   }
   /* USER CODE END 3 */
@@ -436,29 +442,34 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 	pulses_this_sample = __HAL_TIM_GET_COUNTER(&htim2);
 	TIM2->CNT = 0;
 
-	// Error between the target pulses/sample and actual pulses read this sample
-	int32_t error = (int32_t)target_pulses_per_sample - (int32_t)pulses_this_sample;
+	// Feedforward PID Control
+	static float integral = 0.0f;
+	const float min_on_period = htim3.Init.Period * 0.05f;
+	const float max_on_period = htim3.Init.Period * 0.95f;
 
-	// On_period calculation using the PID method (no D as of now), keeping within a 0-95% Duty Cycle
-	if (error > 0) {
-		if (integral < ((uint32_t)htim3.Init.Period * 0.95)) integral += 4; // Motor too slow - increase the integral factor
-	}
-	if (error < 0) {
-		if (integral > 0) integral -= 4; // Motor too fast - decrease the integral factor
-	}
-	proportion = error / 16;
-	tim3_on_period = proportion + integral;
+	float error = (float)target_pulses_per_sample - (float)pulses_this_sample;
+	integral += error;
 
-	// Cap the TIM3 on_period between 5-95% of the TIM3 Counter Period (min 5%, max 95% duty cycle)
-	if (tim3_on_period > ((uint32_t)htim3.Init.Period * 0.95)) {
-		tim3_on_period = ((uint32_t)htim3.Init.Period * 0.95);
+	float on_period = FF_OFFSET + (FF_SLOPE * target_pulses_per_sample) + (KP * error) + (KI * integral);
+
+	// Clamp PWM between 5-95%
+	if (on_period > max_on_period)
+	{
+		on_period = max_on_period;
+		integral -= error;
 	}
-	if (tim3_on_period < ((uint32_t)htim3.Init.Period * 0.05)) {
-		tim3_on_period = ((uint32_t)htim3.Init.Period * 0.05);
+	if (on_period < min_on_period)
+	{
+		on_period = min_on_period;
+		integral -= error;
 	}
+
+	tim3_on_period = (uint32_t)on_period;
 
 	// Set the new on_period to TIM3
 	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, tim3_on_period);
+
+	new_sample = 1;
 
 	// Set pin PA4 LOW at the end of the ISR
 	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
@@ -479,8 +490,6 @@ void print_pulses_and_dc() {
 		textbuffer, sizeof(textbuffer), "Pulses This Sample: %lu | TIM3 Duty Cycle: %lu%%\r\n", pulses_this_sample, duty_cycle
 	);
 	HAL_UART_Transmit(&huart2, (uint8_t *)textbuffer, len, 100);
-
-	HAL_Delay(50);
 }
 
 void print_target_pulses() {
@@ -490,8 +499,6 @@ void print_target_pulses() {
 	textbuffer, sizeof(textbuffer), "Target Pulses per Sample is now %lu\r\n", target_pulses_per_sample
 	);
 	HAL_UART_Transmit(&huart2, (uint8_t *)textbuffer, len, 100);
-
-	HAL_Delay(5000);
 }
 /* USER CODE END 4 */
 

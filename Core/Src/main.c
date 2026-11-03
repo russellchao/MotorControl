@@ -52,7 +52,6 @@ ADC_HandleTypeDef hadc1;
 TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim3;
 TIM_HandleTypeDef htim6;
-TIM_HandleTypeDef htim7;
 
 UART_HandleTypeDef huart2;
 
@@ -76,11 +75,9 @@ static void MX_TIM2_Init(void);
 static void MX_TIM6_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_TIM3_Init(void);
-static void MX_TIM7_Init(void);
 static void MX_ADC1_Init(void);
 /* USER CODE BEGIN PFP */
 void print_pulses_and_dc();
-void print_target_pulses();
 void print_adc();
 /* USER CODE END PFP */
 
@@ -122,7 +119,6 @@ int main(void)
   MX_TIM6_Init();
   MX_USART2_UART_Init();
   MX_TIM3_Init();
-  MX_TIM7_Init();
   MX_ADC1_Init();
   /* USER CODE BEGIN 2 */
   // F3 ADCs must be calibrated once while disabled, before the first conversion
@@ -131,13 +127,10 @@ int main(void)
     Error_Handler();
   }
 
-  HAL_TIM_Base_Start(&htim2);                    // start counting encoder pulses
+  HAL_TIM_Base_Start(&htim2);                     // start counting encoder pulses
 
   __HAL_TIM_CLEAR_FLAG(&htim6, TIM_FLAG_UPDATE);  // avoid an instant first interrupt
   HAL_TIM_Base_Start_IT(&htim6);					 // start interrupt for sampling encoder pulses
-
-  __HAL_TIM_CLEAR_FLAG(&htim7, TIM_FLAG_UPDATE);  // same trick: no instant first interrupt
-  HAL_TIM_Base_Start_IT(&htim7);					 // start interrupt for varying target pulses per sample
 
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);		 // PWM (duty cycle) controller for MOSFET
 
@@ -428,44 +421,6 @@ static void MX_TIM6_Init(void)
 }
 
 /**
-  * @brief TIM7 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_TIM7_Init(void)
-{
-
-  /* USER CODE BEGIN TIM7_Init 0 */
-
-  /* USER CODE END TIM7_Init 0 */
-
-  TIM_MasterConfigTypeDef sMasterConfig = {0};
-
-  /* USER CODE BEGIN TIM7_Init 1 */
-
-  /* USER CODE END TIM7_Init 1 */
-  htim7.Instance = TIM7;
-  htim7.Init.Prescaler = 7199;
-  htim7.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim7.Init.Period = 49999;
-  htim7.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
-  if (HAL_TIM_Base_Init(&htim7) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
-  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-  if (HAL_TIMEx_MasterConfigSynchronization(&htim7, &sMasterConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN TIM7_Init 2 */
-
-  /* USER CODE END TIM7_Init 2 */
-
-}
-
-/**
   * @brief USART2 Initialization Function
   * @param None
   * @retval None
@@ -579,12 +534,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 	// Kick off one ADC conversion; HAL_ADC_ConvCpltCallback fires when it's done
 	HAL_ADC_Start_IT(&hadc1);
   }
-
-//  if (htim->Instance == TIM7) {
-//	  // Interrupt to change the target pulses per sample between 800 and 200
-//	  if (target_pulses_per_sample == 800) target_pulses_per_sample = 200;
-//	  else target_pulses_per_sample = 800;
-//  }
 }
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
@@ -614,15 +563,6 @@ void print_pulses_and_dc() {
 	uint32_t duty_cycle = (tim3_on_period * 100) / (htim3.Init.Period + 1);
 	int len = snprintf(
 		textbuffer, sizeof(textbuffer), "Pulses This Sample: %lu | TIM3 Duty Cycle: %lu%%\r\n", pulses_this_sample, duty_cycle
-	);
-	HAL_UART_Transmit(&huart2, (uint8_t *)textbuffer, len, 100);
-}
-
-void print_target_pulses() {
-	// Transmitting via UART takes up almost 99% of the entire ISR
-	char textbuffer[64];
-	int len = snprintf(
-	textbuffer, sizeof(textbuffer), "Target Pulses per Sample is now %lu\r\n", target_pulses_per_sample
 	);
 	HAL_UART_Transmit(&huart2, (uint8_t *)textbuffer, len, 100);
 }

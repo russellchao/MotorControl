@@ -59,6 +59,9 @@ volatile uint8_t new_sample = 0;
 volatile uint32_t pulses_this_sample = 0;
 static uint32_t target_pulses_per_sample = 800;
 volatile int32_t tim3_on_period = 0;
+
+volatile uint16_t adc_raw = 0;    // latest 10-bit result (0..1023), written in the ADC ISR
+volatile uint8_t  adc_ready = 0;  // set by the ADC ISR, cleared by main loop
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -73,6 +76,7 @@ static void MX_ADC1_Init(void);
 /* USER CODE BEGIN PFP */
 void print_pulses_and_dc();
 void print_target_pulses();
+void print_adc();
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -116,7 +120,13 @@ int main(void)
   MX_TIM7_Init();
   MX_ADC1_Init();
   /* USER CODE BEGIN 2 */
-  HAL_TIM_Base_Start(&htim2);                     // start counting encoder pulses
+  // F3 ADCs must be calibrated once while disabled, before the first conversion
+  if (HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  HAL_TIM_Base_Start(&htim2);                    // start counting encoder pulses
 
   __HAL_TIM_CLEAR_FLAG(&htim6, TIM_FLAG_UPDATE);  // avoid an instant first interrupt
   HAL_TIM_Base_Start_IT(&htim6);					 // start interrupt for sampling encoder pulses
@@ -140,7 +150,11 @@ int main(void)
 		  print_pulses_and_dc();
 	  }
 
-	  //sprint_target_pulses();
+	  if (adc_ready)
+	  {
+		  adc_ready = 0;
+		  print_adc();
+	  }
   }
   /* USER CODE END 3 */
 }
@@ -544,6 +558,9 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 
 	// Set pin PA4 LOW at the end of the ISR
 	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
+
+	// Kick off one ADC conversion; HAL_ADC_ConvCpltCallback fires when it's done
+	HAL_ADC_Start_IT(&hadc1);
   }
 
 //  if (htim->Instance == TIM7) {
@@ -554,7 +571,24 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 }
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
+	// Runs in interrupt context: grab the result and get out
+	if (hadc->Instance == ADC1)
+	{
+		adc_raw = (uint32_t)HAL_ADC_GetValue(hadc);  // already 0..1023 (10-bit)
+		//target_pulses_per_sample = adc_raw;
+		adc_ready = 1;
+	}
+}
 
+void print_adc() {
+	// raw 0..1023 maps linearly onto 0 .. 3.3 V (VDDA on the Nucleo)
+	char textbuffer[64];
+	uint32_t raw = adc_raw;                 // copy once so ISR can't change it mid-calc
+	uint32_t mv  = (raw * 3300u) / 1023u;   // integer millivolts
+	int len = snprintf(
+		textbuffer, sizeof(textbuffer), "ADC: %4lu / 1023 | %lu.%03lu V\r\n", raw, mv / 1000, mv % 1000
+	);
+	HAL_UART_Transmit(&huart2, (uint8_t *)textbuffer, len, 100);
 }
 
 void print_pulses_and_dc() {

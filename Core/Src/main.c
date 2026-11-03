@@ -32,6 +32,8 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define TIM_CLOCK_HZ 72000000 // STM32 TImer clock Frequency is 72MHz
+
 // From the open-loop test: duty_counts ≈ FF_OFFSET + FF_SLOPE * target
 #define FF_OFFSET  100.0f
 #define FF_SLOPE   0.6f
@@ -61,7 +63,10 @@ static uint32_t target_pulses_per_sample = 800;
 volatile int32_t tim3_on_period = 0;
 
 volatile uint16_t adc_raw = 0;    // latest 10-bit result (0..1023), written in the ADC ISR
-volatile uint8_t  adc_ready = 0;  // set by the ADC ISR, cleared by main loop
+volatile uint8_t adc_ready = 0;  // set by the ADC ISR, cleared by main loop
+
+static uint32_t pulse_dc_print_ctr = 0;
+static uint32_t adc_print_ctr = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -135,6 +140,8 @@ int main(void)
   HAL_TIM_Base_Start_IT(&htim7);					 // start interrupt for varying target pulses per sample
 
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);		 // PWM (duty cycle) controller for MOSFET
+
+  float tim6_hz = (TIM_CLOCK_HZ) / ((1 + htim6.Init.Prescaler) * (1 + htim6.Init.Period));
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -147,13 +154,23 @@ int main(void)
 	  if (new_sample)
 	  {
 		  new_sample = 0;
-		  print_pulses_and_dc();
+
+		  // Print the encoder pulse count and TIM3 duty cycle every second
+		  if (++pulse_dc_print_ctr >= tim6_hz) {
+			  pulse_dc_print_ctr = 0;
+			  print_pulses_and_dc();
+		  }
 	  }
 
 	  if (adc_ready)
 	  {
 		  adc_ready = 0;
-		  print_adc();
+
+		  // Print the ADC readings every second
+		  if (++adc_print_ctr >= tim6_hz) {
+			  adc_print_ctr = 0;
+			  print_adc();
+		  }
 	  }
   }
   /* USER CODE END 3 */

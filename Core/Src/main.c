@@ -134,7 +134,7 @@ int main(void)
 
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);		 // PWM (duty cycle) controller for MOSFET
 
-  float tim6_hz = (TIM_CLOCK_HZ) / ((1 + htim6.Init.Prescaler) * (1 + htim6.Init.Period));
+  float tim6_freq = (TIM_CLOCK_HZ) / ((1 + htim6.Init.Prescaler) * (1 + htim6.Init.Period));
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -149,7 +149,7 @@ int main(void)
 		  new_sample = 0;
 
 		  // Print the encoder pulse count and TIM3 duty cycle every second
-		  if (++pulse_dc_print_ctr >= tim6_hz) {
+		  if (++pulse_dc_print_ctr >= tim6_freq) {
 			  pulse_dc_print_ctr = 0;
 			  print_pulses_and_dc();
 		  }
@@ -160,7 +160,7 @@ int main(void)
 		  adc_ready = 0;
 
 		  // Print the ADC readings every second
-		  if (++adc_print_ctr >= tim6_hz) {
+		  if (++adc_print_ctr >= tim6_freq) {
 			  adc_print_ctr = 0;
 			  print_adc();
 		  }

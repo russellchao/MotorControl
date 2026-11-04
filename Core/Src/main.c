@@ -32,7 +32,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define TIM_CLOCK_HZ 72000000 // STM32 TImer clock Frequency is 72MHz
+#define TIM_CLOCK_FREQ 72000000 // STM32 TImer clock Frequency is 72MHz
 
 // From the open-loop test: duty_counts ≈ FF_OFFSET + FF_SLOPE * target
 #define FF_OFFSET  100.0f
@@ -58,7 +58,7 @@ UART_HandleTypeDef huart2;
 /* USER CODE BEGIN PV */
 volatile uint8_t new_sample = 0;
 volatile uint32_t pulses_this_sample = 0;
-static uint32_t target_pulses_per_sample = 800;
+volatile uint32_t target_pulses_per_sample = 0;
 volatile int32_t tim3_on_period = 0;
 
 volatile uint16_t adc_raw = 0;    // latest 10-bit result (0..1023), written in the ADC ISR
@@ -134,7 +134,7 @@ int main(void)
 
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);		 // PWM (duty cycle) controller for MOSFET
 
-  float tim6_freq = (TIM_CLOCK_HZ) / ((1 + htim6.Init.Prescaler) * (1 + htim6.Init.Period));
+  float tim6_freq = (TIM_CLOCK_FREQ) / ((1 + htim6.Init.Prescaler) * (1 + htim6.Init.Period));
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -541,7 +541,7 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
 	if (hadc->Instance == ADC1)
 	{
 		adc_raw = (uint32_t)HAL_ADC_GetValue(hadc);  // already 0..1023 (10-bit)
-		//target_pulses_per_sample = adc_raw;
+		target_pulses_per_sample = adc_raw;
 		adc_ready = 1;
 	}
 }
